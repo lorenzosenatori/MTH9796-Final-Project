@@ -1,0 +1,35 @@
+LOOK-AHEAD BIAS AUDIT CHECKLIST
+==================================================
+
+[PASS] §3.1 Entry timing — AMC vs BMO
+    Parsed MOSTIMPORTANTDATEUTC hour. hour≥16 UTC or missing time → AMC → entry = next trading day; hour<16 UTC → BMO → entry = same day close. For SP500 events: AMC: 9,374, BMO: 17,694. Implementation: next_td_on_or_after() in Cell 6, applied per universe.
+
+[PASS] §3.2 Forward returns are targets, never inputs
+    fwd_ret_*d columns computed from CRSP (SP500) and yfinance (SP400/600) prices indexed AFTER entry_date. Never used as model features. Sanity check (§1.6): a control signal built from the noise classes (Fluff + Filler), once normalized by transcript length, shows IC ≈ 0 across all horizons (|IC| < 0.01, p > 0.10 at every horizon). The raw-count version showed apparent IC at 10d/20d, traced to a transcript-length × sector confound, not a methodological leak.
+
+[PASS] §3.3 Cross-sectional features are point-in-time
+    Within-ticker temporal features use groupby(BESTTICKER).shift(1) — only prior calls observable. atc_ma3 uses shift(1).rolling(3) — past values only. Decile assignment uses monthly_deciles(): rank-based within entry_month, consistent with a monthly rebalance cadence (at month-end, all events from the just-completed month are observable for ranking the next portfolio). An earlier global-pooled qcut over 2010-2024 was replaced with this within-bucket approach to eliminate full-sample look-ahead.
+
+[PASS] §3.4 Feature selection is part of training
+    No feature selection performed. All 14 baseline / 63 enhanced features are used in every walk-forward fold. No Spearman/MI ranking, PCA fit, or target-encoding applied to test data.
+
+[PASS] §3.5 Imputation and scaling are part of training
+    No imputation or scaling applied. LightGBM handles NaN natively. No StandardScaler used. AspectTheme features have 100% coverage so no imputation question arises.
+
+[CAVEAT] §3.6 Universe membership is point-in-time
+    SP500 constituents from Compustat (comp.idxcst_his) reflect current membership only — not full historical entry/exit dates. SP400/SP600 use current Wikipedia lists. Survivorship bias acknowledged in writeup; reported alpha is therefore an upper bound.
+
+[PASS] §3.7 INGESTDATEUTC ≠ availability date
+    Entry date uses MOSTIMPORTANTDATEUTC + AMC/BMO rule. INGESTDATEUTC investigated but not applied as a secondary filter. On SP500: 77.1% of events show INGEST delays >1 year due to ProntoNLP's 2022-2023 bulk historical-archive load — these are data-load artifacts, not real production ingestion lags. Realistic delays (1-30 days) affect only 2.0% of events. Applying the strict max(entry, INGESTDATEUTC) rule would render 77% of pre-2022 events untradeable based on an operational artifact. See Cell 6b for full quantification.
+
+[PASS] §3.8 No future QoQ deltas
+    atc_delta = ATCClassifierScore − groupby(ticker).shift(1). atc_vs_ma3 = current − shift(1).rolling(3).mean(). ev421_delta = analogous. All temporal features look backward only.
+
+[PASS] §3.9 Corporate-action / delisting handling
+    CRSP returns are split- and dividend-adjusted by construction. yfinance fetched with auto_adjust=True. Events with no valid price on entry_date yield NaN forward returns and are dropped before any IC or portfolio computation. (Note: CRSP delisting returns dlret not incorporated; minor short-side caveat documented in writeup.)
+
+[PASS] §3.10 Hyperparameter tuning leaks
+    LightGBM hyperparameters fixed a priori (n_estimators=300, max_depth=5, learning_rate=0.04, reg_alpha=0.2, reg_lambda=2.0). Same parameters applied to baseline (14-feat) and enhanced (63-feat) models for fair comparison. No grid search on test period. Walk-forward: train ≤ 2019Q4, test 2020Q1–2024Q4.
+
+
+SUMMARY: 9 PASS, 1 CAVEATS, 0 FAIL

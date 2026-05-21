@@ -1,0 +1,12 @@
+# Large input data
+Earnings_ATC_until_2026-04-21.csv
+Earnings_ATC_until_2026-04-21.csv.zip
+IWV_holdings.csv
+
+# Auto-built cache
+cache/
+
+# OS junk
+.DS_Store
+__pycache__/
+.ipynb_checkpoints/
